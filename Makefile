@@ -35,4 +35,9 @@ server: ./$(CARTELLA_SERVER)/serverUDP$(VERSIONE_SERVER).c $(PROG_PER_SERVER)
 clean:
 	rm $(NOME_PROG_SERVER)
 	rm $(NOME_PROG_CLIENT)
+	
+cleanserver:
+	rm $(NOME_PROG_SERVER)
 
+cleanclient:
+	rm $(NOME_PROG_CLIENT)
