@@ -4,15 +4,17 @@
 
 /* STRUTTURA DEL PROGRAMMA
 main:
-	_inizio_
+	while(1) {
 	attendi che venga inserita dall'utente un comando
 	crea un thread che gestisce la richiesta
-	ritorna ad _inizio_	
+	}
+	
 thread richiesta:
-	*****
+	divide la richiesta in pacchetti di 32B (per averne tanti fittiziamente)
+	fa la selective repeat chiamando thread pacchetto
 
 thread pacchetto:
-/*	legge il pacchetto che ha ricevuto dal thread richiesta
+	legge il pacchetto che ha ricevuto dal thread richiesta
 	simula eventuale perdita
 	invia il pacchetto
 	attiva un timer
@@ -39,17 +41,14 @@ thread pacchetto:
 #define windowSize	4	// dimensione della finestra del selective repeat
 
 
-/* GLOBAL VARIABLES shared between threads */
-char *	indirizzoServ;		// indirizzo del server
-
-struct arg_struct {		// argomento da passare al thread gestore pacchetto
+/* global variables shared between threads */
+char *	indirizzoServ;				// indirizzo del server
+pthread_mutex_t mutexScarta, mutexControlla;	// mutex per consent. accesso unico a scarta e controlla
+struct arg_struct {				// argomento da passare al thread gestore pacchetto
   struct sockaddr_in addr;
   char buff[MAXLINE];
   int socketDescriptor;
 };
-
-pthread_mutex_t mutexScarta, mutexControlla;
-/* _______________________________________ */
 
 
 void * gestisciRichiesta(void* richiestaDaGestire);	// dichiarazione
@@ -98,7 +97,7 @@ void * gestisciRichiesta(void* richiestaDaGestire)
   {
   	char * ric = (char *)richiestaDaGestire;	// cast per gestire la richiesta
   	#ifdef PRINT
-	printf("PRINT: thread richiesta - gestisco \"%s\" \n", ric);		// stampa la richiesta
+	printf("PRINT: thread richiesta - gestisco la richiesta: \"%s\" \n", ric);		// stampa la richiesta
 	#endif
 	
 	pthread_mutex_lock(&mutexControlla);
@@ -110,7 +109,6 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	}
 	pthread_mutex_unlock(&mutexControlla);
 	printf("invio richiesta \"%s\" al server \n", ric);
-		
 	
 	int   sockfd, n, retValue;
 	char  recvline[MAXLINE + 1];
@@ -133,6 +131,9 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		fprintf(stderr, "errore in inet_pton per %s", indirizzoServ);
 		exit(1);
 	}
+	
+	int numPacch = MAXLINE/32;
+	int dimPacch = MAXLINE/numPacch;
 	
 	/*raccolgo le informazioni per la gestione del pacchetto in una struttura */
 	struct arg_struct args;
@@ -159,9 +160,14 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 			fprintf(stderr, "errore in fputs");
 			exit(1);
 		}
+		#ifdef PRINT
+		printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
+		#endif
 		pthread_cancel(thread_id);
-		printf("thread cancellato \n");
 		// *** ricordati controlli cancel***
+		#ifdef PRINT
+		printf("PRINT: thread cancellato \n");
+		#endif
 	}
 	
 	fine_richiesta:
