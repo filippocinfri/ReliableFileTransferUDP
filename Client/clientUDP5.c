@@ -73,16 +73,20 @@ int main(int argc, char *argv[ ])
   				// essendo una variabile globale, è accessibile a tutti i server
   pthread_t thread_id;		// dichiaro un intero che rappresenta l'ID del thread
   char	richiesta[MAXLINE];	// dichiaro buffer testuale dove l'utente inserisce la richiesta
+  char*	puntatoreRichiesta;	// ......
   int	retValue;		// dichiaro variabile che ospita il val di ritorno della pthread_create
   				// per poi fare controlli
   
   while(1){
   	//printf("inserisci una richiesta: ");		//chiedi all'utente una nuova richiesta
   	scanf("%s", richiesta);				//attendi che l'utente inserisca una richiesta
+  	puntatoreRichiesta = (char *)malloc(MAXLINE);
+  	memcpy(puntatoreRichiesta, richiesta, MAXLINE);
   	#ifdef PRINT
-  	printf("PRINT: richiesta inserita: \"%s\" \n", richiesta);	//notifica l'utente della richiesta
+  	printf("PRINT: richiesta: \"%s\" inserita in:  %p \n", puntatoreRichiesta, puntatoreRichiesta);	//notifica l'utente della richiesta
   	#endif
-  	retValue = pthread_create(&thread_id, NULL, gestisciRichiesta, (void*)richiesta);
+  	
+  	retValue = pthread_create(&thread_id, NULL, gestisciRichiesta, (void*)puntatoreRichiesta);
   	// *** ricordati di fare i controlli di thread create ***
   }
   exit(0);
@@ -158,6 +162,8 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		printf("thread cancellato \n");
 		// *** ricordati controlli cancel***
 	}
+	
+	free(richiestaDaGestire);		// libero lo spazio che prima avevo allocato per la richiesta
 	pthread_exit(NULL);			// termina il thread
   }
   
