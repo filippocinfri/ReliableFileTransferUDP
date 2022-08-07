@@ -105,7 +105,8 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	//***controlli lock
 	if(controllaRichiesta(ric) == 0){		// controlla che la richiesta effettuata dal client sia legittima
 		fprintf(stderr, "inserire: list / get_<file name> / put_<file name> \n");
-		pthread_exit(NULL);			// termina il thread
+		pthread_mutex_unlock(&mutexControlla);
+		goto fine_richiesta;			// termina il thread
 	}
 	pthread_mutex_unlock(&mutexControlla);
 	printf("invio richiesta \"%s\" al server \n", ric);
@@ -163,6 +164,7 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		// *** ricordati controlli cancel***
 	}
 	
+	fine_richiesta:
 	free(richiestaDaGestire);		// libero lo spazio che prima avevo allocato per la richiesta
 	pthread_exit(NULL);			// termina il thread
   }
@@ -193,7 +195,7 @@ void * gestisciPacchetto(void * arg)
   }
   else {
   	#ifdef PRINT
-  	printf("pacchetto scartato \n"); // il client non usa questa informazione
+  	printf("PRINT: pacchetto scartato \n"); // il client non usa questa informazione
   	#endif
   }
   

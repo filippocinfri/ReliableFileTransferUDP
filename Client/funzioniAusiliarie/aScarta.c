@@ -1,7 +1,7 @@
 /* funzione ausiliare per determinare se il pacchetto va scartato*/
 /* ritorna 1 se il pacchetto va scartato, altrimenti 0 */
 
-// ? verificare se è thread safe
+// non è thread safe
 
 // STRUTTURA
 /* genero un intero tramite rand();
@@ -13,7 +13,7 @@ in questo modo riesco a scartare i pacchetti con la probabilità prefissata */
 #include <stdlib.h>
 #include <time.h>
 
-#define	probPerdita	0.2
+#define	probPerdita	0.7
 
 int scarta(void)
 {
@@ -21,7 +21,9 @@ int scarta(void)
   srand(time(NULL));	// inizializzo
   value = rand();	// estrae un numero pseudo-casuale
   
-  //printf("p:%f v:%f rMAX:%d  ris:%f\n", probPerdita, value, RAND_MAX, value/(double)RAND_MAX);
+  #ifdef PRINT
+  printf(" --------> p:%f v:%f rMAX:%d  ris:%f\n", probPerdita, value, RAND_MAX, value/(double)RAND_MAX);
+  #endif
   
   if(value/(double)RAND_MAX < probPerdita){
   	return 1;
