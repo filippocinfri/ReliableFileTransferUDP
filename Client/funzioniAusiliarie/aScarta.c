@@ -1,3 +1,15 @@
+
+//------------------------------//
+//				//
+//	! NON FUNZIONA !	//
+//				//
+//	! NON FUNZIONA !	//
+//				//
+//------------------------------//
+
+
+
+
 /* funzione ausiliare per determinare se il pacchetto va scartato*/
 /* ritorna 1 se il pacchetto va scartato, altrimenti 0 */
 
