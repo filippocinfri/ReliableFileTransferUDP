@@ -38,5 +38,5 @@ int scarta(void)
   printf("PRINT: randomNum:%hu percentuale:%f p:%f \n", randomNum, (double)randomNum/(double)USHRT_MAX,probPerdita);
   #endif
   
-  return ((double)randomNum/(double)USHRT_MAX < probPerdita));
+  return ((double)randomNum/(double)USHRT_MAX < probPerdita);
 }
