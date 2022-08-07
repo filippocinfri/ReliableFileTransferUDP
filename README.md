@@ -1,2 +1,2 @@
 # ReliableFileTransferUDP
-Reliable transfer of files with UDP protocol
+Reliable transfer of files using UDP protocol
