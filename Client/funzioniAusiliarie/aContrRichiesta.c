@@ -10,10 +10,10 @@ int controllaRichiesta(char* richiesta)
   if(strcmp(richiesta, "list") == 0){
   	return 1;
   }
-  if(strncmp(richiesta, "put_", 4) == 0){
+  if(strncmp(richiesta, "get_", 4) == 0){
   	return 2;
   }
-  if(strncmp(richiesta, "get_", 4) == 0){
+  if(strncmp(richiesta, "put_", 4) == 0){
   	return 3;
   }
   return 0;

@@ -19,6 +19,14 @@ thread pacchetto:
 	invia il pacchetto
 	attiva un timer
 	se il timer è scaduto, e il thread non è stato terminato, ricomincia dall'inizio
+	
+main			->	richiesta(gestisci richiesta)
+
+gestore richiesta	->	richiesta(gestore connessione)
+
+gestore connessione	->	porta(gestore invii o gestore ack in base alla richiesta)
+
+
 */
 
 
@@ -37,7 +45,7 @@ thread pacchetto:
 #define	SERV_PORT	5193 
 #define	MAXLINE		1024
 #define	sizeOfRic	1024
-#define timeOutSec	5.2	// secondi per la scadenza del timer
+#define timeOutSec	12.2	// secondi per la scadenza del timer
 #define windowSize	4	// dimensione della finestra del selective repeat
 
 
@@ -77,10 +85,16 @@ int main(int argc, char *argv[ ])
   				// per poi fare controlli
   
   while(1){
-  	//printf("inserisci una richiesta: ");		//chiedi all'utente una nuova richiesta
-  	scanf("%s", richiesta);				//attendi che l'utente inserisca una richiesta
+  	scanf("%s", richiesta);			//attendi una richiesta dall'utente
+  	
   	puntatoreRichiesta = (char *)malloc(MAXLINE);
-  	memcpy(puntatoreRichiesta, richiesta, MAXLINE);
+  	if (puntatoreRichiesta == NULL) {	//errore nella malloc
+  		fprintf(stderr, "main: errore nella malloc\n");
+  		exit(1)
+  	}
+  	
+  	memcpy(puntatoreRichiesta, richiesta, MAXLINE); //salvo la richiesta
+  	
   	#ifdef PRINT
   	printf("PRINT: richiesta: \"%s\" inserita in:  %p \n", puntatoreRichiesta, puntatoreRichiesta);	//notifica l'utente della richiesta
   	#endif
@@ -102,13 +116,13 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	
 	pthread_mutex_lock(&mutexControlla);
 	//***controlli lock
-	if(controllaRichiesta(ric) == 0){		// controlla che la richiesta effettuata dal client sia legittima
+	int risultatoRichiesta = controllaRichiesta(ric);
+	pthread_mutex_unlock(&mutexControlla);
+	
+	if(risultatoRichiesta == 0){		// controlla che la richiesta effettuata dal client sia legittima
 		fprintf(stderr, "inserire: list / get_<file name> / put_<file name> \n");
-		pthread_mutex_unlock(&mutexControlla);
 		goto fine_richiesta;			// termina il thread
 	}
-	pthread_mutex_unlock(&mutexControlla);
-	printf("invio richiesta \"%s\" al server \n", ric);
 	
 	int   sockfd, n, retValue;
 	char  recvline[MAXLINE + 1];
@@ -132,18 +146,131 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		exit(1);
 	}
 	
-	int numPacch = MAXLINE/32;
-	int dimPacch = MAXLINE/numPacch;
+	
+	
+	#ifdef PRINT
+	printf("PRINT: attivo gestore connessione per richiesta: %s\n", ric);
+	#endif
+	
+	//----------------GESTORE CONNESSIONE-----------------------//
+	//invia comando
+	pthread_t thread_id;		// mantengo gli ID del thread per cancellarlo
 	
 	/*raccolgo le informazioni per la gestione del pacchetto in una struttura */
 	struct arg_struct args;
 	args.addr = servaddr;
 	args.socketDescriptor = sockfd;
+	// ricorda di fare la malloc
 	strncpy(args.buff,ric,MAXLINE);
 	// ricorda di fare la malloc
 	
-	printf("creo thread che gestisce timer pacchetto\n"); //test
-	pthread_t thread_id;		// mantengo l'ID del thread per cancellarlo
+	pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args));
+	//attendi ack della richiesta (comune a tutti e 3 i comandi)
+	/* Legge dal socket il pacchetto di risposta */
+	n = recvfrom(sockfd, recvline, MAXLINE, 0 , NULL, NULL);
+	if (n < 0) {
+		perror("errore in recvfrom");
+		exit(1);
+	}
+	if (n > 0) {
+		recvline[n] = 0;	// aggiunge carattere di terminazione
+		if (fputs(recvline, stdout) == EOF) {	// stampa recvline sullo stdout
+			fprintf(stderr, "errore in fputs");
+			exit(1);
+		}
+		#ifdef PRINT
+		printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
+		#endif
+		// *** ricordati controlli cancel***
+		if(strncmp(recvline, "ack", 3) == 0){
+			#ifdef PRINT
+			printf("PRINT: ack ricevuto \n");
+			#endif
+			// invio conferma ack
+			pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args));
+		}
+		//else?
+	}
+	pthread_cancel(thread_id);
+	#ifdef PRINT
+	printf("PRINT: thread cancellato \n");
+	#endif
+	
+	
+	
+	if (risultatoRichiesta < 3) { //list e get_file
+		// mettiti in ascolto
+		// invia gli acks
+		
+		//gli ultimi 2 comandi tramite gestore ricezioni
+		
+		
+		
+		
+		//pacchetti attesi
+		int j;
+		for(j=0; j<2; j++){
+			n = recvfrom(sockfd, recvline, MAXLINE, 0 , NULL, NULL);
+			if (n < 0) {
+				perror("errore in recvfrom");
+				exit(1);
+			}
+			if (n > 0) {
+				recvline[n] = 0;	// aggiunge carattere di terminazione
+				if (fputs(recvline, stdout) == EOF) {	// stampa recvline sullo stdout
+					fprintf(stderr, "errore in fputs");
+					exit(1);
+				}
+				#ifdef PRINT
+				printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
+				#endif
+				pthread_cancel(thread_id);
+				// *** ricordati controlli cancel***
+				#ifdef PRINT
+				printf("PRINT: thread cancellato \n");
+				#endif
+			}
+		}
+		
+		
+		
+		
+		
+	}
+	else { //put_file
+		
+		//leggi dove scrivere
+		// attiva gestore invii
+	}
+	
+	goto fine_richiesta;
+	/*
+	int numPacch = 0;
+	
+	int indiceSend, inizioWindow;
+	int vettoreAck[numPacch];
+	int i;
+	for(i=0; i<numPacch; i++){
+		vettoreAck[i] = 0;
+	}
+	
+	//gestore ack
+	
+	inizioWindow = 0;
+	indiceSend = 0;
+	while(inizioWindow < numPacch){
+		#ifdef PRINT
+		printf("PRINT: gest. rich. inizioWind: %d indiceSend %d \n", inizioWindow, indiceSend);
+		#endif
+		if(indiceSend < min(inizioWindow+windowSize, numPacch)){
+			//attiva un gestore pacchetto
+			indiceSend++;
+		}
+		if(vettoreAck[inizioWindow] == 1) {
+			inizioWindow++;
+		}		
+	}
+	*/
 	pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args));
   	// *** ricordati di fare i controlli di thread create ***
   	printf("fine thread create \n"); //test
