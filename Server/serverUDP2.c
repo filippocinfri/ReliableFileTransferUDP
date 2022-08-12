@@ -62,7 +62,7 @@ int main(int argc, char **argv) {
     printf("Ricevuto messaggio da IP: %s e porta: %i\n",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port));
     printf("Contenuto:%s\n", buff);
 
-    /* Creazione Thread per ogni richiesta, poichè abbiamo sicuramente ricevuto qualcosa */
+    /* Creazione Thread per ogni richiesta, poichï¿½ abbiamo sicuramente ricevuto qualcosa */
     printf("thread creato: %d \n",create_thread(buff,addr));
     
   }
@@ -115,16 +115,18 @@ void clientRequestManager(struct arg_struct* arg){
   readRequest(binary);
   free(binary);
   
-  int i;
   char risposta[MAXLINE];
-  for(i=0; i<3; i++){
+  while(1){
   	scanf("%s", risposta);
-  	printf("risposta %d: %s \n", i, risposta);
+  	printf("risposta inserita: %s \n", risposta);
   	//RISPOSTA AL CLIENT, 3) Rispondere, con l'invio numero di porta (se serve) su cui inviare il file 
   	if(sendto(sockReq, risposta, strlen(risposta), 0, (struct sockaddr_in*)&(arg->addr), sizeof(struct sockaddr_in)) < 0) {
     		perror("errore in sendto");
     		exit(1);
-  		}
+  	}
+    if(strncmp(risposta, "stop", 4) == 0){
+      break;
+    }
   }
   
 

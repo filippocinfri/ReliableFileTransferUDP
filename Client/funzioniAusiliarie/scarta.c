@@ -3,9 +3,9 @@
 
 // STRUTTURA
 /*	leggo 2 byte randomici da dev/urandom
-	divido i due byte per il massimo unsigned short int, così
+	divido i due byte per il massimo unsigned short int, cosï¿½
 	da ottenere un numero compreso tra 0 e 1
-	se il numero è < probPerdita allora scarto il pacchetto*/
+	se il numero ï¿½ < probPerdita allora scarto il pacchetto*/
 
 #include <unistd.h>
 #include <stdio.h>
@@ -34,9 +34,10 @@ int scarta(void)
   	exit(1);
   }
   
+  /*
   #ifdef PRINT
   printf("PRINT: randomNum:%hu percentuale:%f p:%f \n", randomNum, (double)randomNum/(double)USHRT_MAX,probPerdita);
   #endif
-  
+  */
   return ((double)randomNum/(double)USHRT_MAX < probPerdita);
 }
