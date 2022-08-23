@@ -195,10 +195,37 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		else{
 			//ho ricevuto una risposta != ack, situazione inattesa
 			#ifdef PRINT
-			printf("PRINT: thread richiesta: \"%s\" risposta: NON get \n", ric);
+			printf("PRINT: thread richiesta: \"%s\" risposta: NON ack \n", ric);
 			#endif
 		}
 	}
+	
+	// libero lo spazio del messaggio precedente
+	free(head);
+
+	// Creo il pacchetto di ack
+	lunghezzaPayload = 0;
+	printf("%hu %d \n", lunghezzaPayload, lunghezzaPayload);
+	char * ackPacket = malloc(HEADER_DIM);
+	memset((void *)ackPacket, 0, HEADER_DIM);		// head
+	memset((void *)ackPacket, setBit(ackPacket[0], 6), 1);	// head
+	memset((void *)ackPacket, setBit(ackPacket[0], 7), 1);	// head
+	
+	//#ifdef PRINT
+	//printf("PRINT: gestisci richiesta - payload packet: %s \n", head+HEADER_DIM);
+	//printf("PRINT: gestisci richiesta - header: %c \n", head[0]);
+	//#endif
+
+	args.buff = ackPacket;
+	
+	// invio ack
+	if(pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args)) != 0) {
+		fprintf(stderr, "main: errore nella pthread_create\n");
+  		exit(1);
+  	}
+	sleep(10); //poi va modificato, 	attenderà messaggi successivi
+	pthread_cancel(thread_id);
+
 	goto fine_richiesta;
 
 
