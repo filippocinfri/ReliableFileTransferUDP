@@ -1,15 +1,5 @@
 /* STRUTTURA DEL PROGRAMMA
-main:
-	while(1) {
-	attendi che venga inserita dall'utente un comando
-	crea un thread che gestisce la richiesta
-	}
 
-main				->	richiesta			to: gestisci richiesta
-
-gestore richiesta	->	richiesta, socket	to: gestore connessione
-
-gestore connessione	->	porta 				to: gestore invii o gestore ack in base alla richiesta
 */
 
 
@@ -25,9 +15,13 @@ gestore connessione	->	porta 				to: gestore invii o gestore ack in base alla ri
 #include "libreria.h"
 
 
-#define	SERV_PORT		5193 
-#define	MAXLINE			1024
-#define timeOutSec		12.2	// secondi per il timeout del timer
+#define	SERV_PORT		5193
+#define SHORTPAY		128
+#define LONGPAY			1024
+#define HEADER_DIM		7
+#define	PACK_LEN		LONGPAY+HEADER_DIM
+#define SHORT_PACK_LEN	SHORTPAY+HEADER_DIM
+#define timeOutSec		9.2	// secondi per il timeout del timer
 #define windowSize		4		// dimensione della finestra del selective repeat
 
 
@@ -35,16 +29,15 @@ gestore connessione	->	porta 				to: gestore invii o gestore ack in base alla ri
 char *	indirizzoServ;				// indirizzo del server
 pthread_mutex_t mutexScarta, mutexControlla;	// mutex per consent. accesso unico a scarta e controlla
 struct arg_struct {				// struttura da passare come argomento tra i thread
-  struct sockaddr_in addr;
-  char buff[MAXLINE];
-  int socketDescriptor;
+  struct	sockaddr_in addr;
+  char *	buff;				//pacchetto
+  int		socketDescriptor;
 };
 
 
 // dichiarazioni dei gestori
 void * gestisciRichiesta(void* richiestaDaGestire);	
 void * gestisciPacchetto(void* arg);
-void * gestoreConnessione(void* arg);
 
 
 int main(int argc, char *argv[ ])
@@ -67,7 +60,7 @@ int main(int argc, char *argv[ ])
   
   indirizzoServ = argv[1];	// var. globale, indirizzo del server accessibile a tutti i server
   pthread_t thread_id;		// ID del thread
-  char	richiesta[MAXLINE];	// dichiaro buffer dove viene inserita la richiesta
+  char	richiesta[SHORTPAY]; //dichiaro buffer dove viene inserita la richiesta
   char*	puntatoreRichiesta;	// ......
   int	retValue;		// dichiaro variabile che ospita il val di ritorno della pthread_create
   						// per poi fare controlli
@@ -76,15 +69,15 @@ int main(int argc, char *argv[ ])
   while(1){
 	// inserire una richiesta
   	scanf("%s", richiesta);
-  	
+
+
 	// salvo la richiesta
-  	puntatoreRichiesta = (char *)malloc(MAXLINE);
-  	if (puntatoreRichiesta == NULL) {	//errore nella malloc
+  	puntatoreRichiesta = (char *)calloc(SHORTPAY, 1);
+	if (puntatoreRichiesta == NULL) {	//errore nella calloc
   		fprintf(stderr, "main: errore nella malloc\n");
   		exit(1);
   	}
-  	memcpy(puntatoreRichiesta, richiesta, MAXLINE); 
-  	
+  	memcpy(puntatoreRichiesta, richiesta, SHORTPAY);
   	#ifdef PRINT
   	printf("PRINT: richiesta: \"%s\" inserita in:  %p \n", puntatoreRichiesta, puntatoreRichiesta);	//notifica l'utente della richiesta
   	#endif
@@ -103,9 +96,10 @@ int main(int argc, char *argv[ ])
 void * gestisciRichiesta(void* richiestaDaGestire)
   {
   	char * ric = (char *)richiestaDaGestire;
-  	#ifdef PRINT
+	#ifdef PRINT
 	printf("PRINT: thread richiesta - gestisco la richiesta: \"%s\" \n", ric);		// stampa la richiesta
 	#endif
+	
 	
 	// Controlla la correttezza della richiesta inserita
 	if (pthread_mutex_lock(&mutexControlla)!=0) {	//per evitare accessi sovrapposti
@@ -122,9 +116,24 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		goto fine_richiesta;	// il thread deve terminare
 	}
 
+	// Creo il pacchetto
+	unsigned short lunghezzaPayload = strlen(ric)-4;
+	printf("%hu %d \n", lunghezzaPayload, lunghezzaPayload);
+	char * head = malloc(SHORT_PACK_LEN);
+	memset((void *)head, 0, SHORT_PACK_LEN);		// head
+	memset((void *)head, setBit(head[0], 6), 1);	// head
+	head[1] = lunghezzaPayload;
+	strcat(head+HEADER_DIM, ric);
 	
+	//#ifdef PRINT
+	//printf("PRINT: gestisci richiesta - payload packet: %s \n", head+HEADER_DIM);
+	//printf("PRINT: gestisci richiesta - header: %c \n", head[0]);
+	//#endif
+
+
 	int   sockfd, n, retValue;
-	char  recvline[MAXLINE + 1];
+	char  recvlineShort[SHORT_PACK_LEN];
+	char  recvlineLong[PACK_LEN];
 	struct sockaddr_in servaddr;
 
 
@@ -146,36 +155,36 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	}
 	
 
-	#ifdef PRINT
-	printf("PRINT: attivo gestore connessione per richiesta: %s\n", ric);
-	#endif
-	
 	//----------------GESTORE CONNESSIONE-----------------------//
 	pthread_t thread_id;	// mantengo ID del thread per poterlo cancellare
 	/*raccolgo le informazioni per la gestione del pacchetto in una struttura */
 	struct arg_struct args;
 	args.addr = servaddr;
 	args.socketDescriptor = sockfd;
-	strncpy(args.buff,ric,MAXLINE); // ¿¿serve la malloc??
-	
-	printf("Gest Rich: socket descriptor: %d \n", sockfd);
+	//strncpy(args.buff,head,SHORT_PACK_LEN); //¿serve la malloc??
+	args.buff = head;
+
+	//#ifdef PRINT
+	//printf("PRINT: gestisci richiesta - payload packet: %s \n", args.buff+HEADER_DIM);
+	//printf("PRINT: gestisci richiesta - header: %c \n", args.buff[0]);
+	//#endif
 
 	// invio richiesta
 	if(pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args)) != 0) {
 		fprintf(stderr, "main: errore nella pthread_create\n");
   		exit(1);
   	}
-	// attendi connessione
-	n = recvfrom(sockfd, recvline, MAXLINE, 0 , NULL, NULL);
+	// attendi ack
+	n = recvfrom(sockfd, recvlineShort, SHORT_PACK_LEN, 0, NULL, NULL);
 	if (n < 0) {
 		perror("errore in recvfrom");
 		exit(1);
 	}
 	if (n > 0) {
-		recvline[n] = 0;	// aggiunge carattere di terminazione
-		if(strncmp(recvline, "ack", 3) == 0) {
+		char head = recvlineShort[0];
+		if(readBit(head, 7) == 0 & readBit(head, 6) == 1){
 			#ifdef PRINT
-			printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
+			printf("PRINT: thread richiesta: \"%s\" risposta: get \n", ric);
 			#endif
 			pthread_cancel(thread_id);
 			// *** ricordati controlli cancel***
@@ -184,18 +193,26 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 			#endif
 		}
 		else{
-		//ho ricevuto una risposta != ack, situazione inattesa
+			//ho ricevuto una risposta != ack, situazione inattesa
+			#ifdef PRINT
+			printf("PRINT: thread richiesta: \"%s\" risposta: NON get \n", ric);
+			#endif
 		}
 	}
-	
+	goto fine_richiesta;
 
+
+    printf("Ricevuto ack da IP: %s e porta: %i\n",inet_ntoa(servaddr.sin_addr),ntohs(servaddr.sin_port));
+    
+
+	/*
 	// in base al comando
 	if (risultatoRichiesta < 3) { //list e get_file
 		// mettiti in ascolto
 		// invia gli acks
 		
 		while(1){
-			n = recvfrom(sockfd, recvline, MAXLINE, 0 , NULL, NULL);
+			n = recvfrom(sockfd, recvlineShort, PACK_LEN, 0, NULL, NULL);
 			if (n < 0) {
 				perror("errore in recvfrom");
 				exit(1);
@@ -227,7 +244,7 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		//leggi dove scrivere
 		// attiva gestore invii
 	}
-	
+	*/
 	goto fine_richiesta;
 	/*
 	int numPacch = 0;
@@ -256,31 +273,6 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		}		
 	}
 	*/
-	pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args));
-  	// *** ricordati di fare i controlli di thread create ***
-  	printf("fine thread create \n"); //test
-	
-	/* Legge dal socket il pacchetto di risposta */
-	n = recvfrom(sockfd, recvline, MAXLINE, 0 , NULL, NULL);
-	if (n < 0) {
-		perror("errore in recvfrom");
-		exit(1);
-	}
-	if (n > 0) {
-		recvline[n] = 0;	// aggiunge carattere di terminazione
-		if (fputs(recvline, stdout) == EOF) {	// stampa recvline sullo stdout
-			fprintf(stderr, "errore in fputs");
-			exit(1);
-		}
-		#ifdef PRINT
-		printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
-		#endif
-		pthread_cancel(thread_id);
-		// *** ricordati controlli cancel***
-		#ifdef PRINT
-		printf("PRINT: thread cancellato \n");
-		#endif
-	}
 	
 	fine_richiesta:
 	close(sockfd);				// chiudiamo il descrittore della socket
@@ -296,9 +288,15 @@ void * gestisciPacchetto(void * arg)
   struct arg_struct* args = (struct arg_struct*)arg;
   struct sockaddr_in servaddr = args->addr;
   int	sockfd = args->socketDescriptor;
-  char	ric[MAXLINE];
+  char*	pack;
   int	retValue;
-  strncpy(ric,args->buff,MAXLINE);
+  
+  pack = args->buff;
+	
+	//#ifdef PRINT
+	//printf("PRINT: gestore pack - payload packet: %s \n", pack+HEADER_DIM);
+	//printf("PRINT: gestore pack - header: %c \n", pack[0]);
+	//#endif
   
   invio:
   /* Invia al server il pacchetto di richiesta */
@@ -306,7 +304,7 @@ void * gestisciPacchetto(void * arg)
   int decisione = scarta();
   pthread_mutex_unlock(&mutexScarta);
   if(decisione == 0) {	// se il pacchetto non va scartato restituisce 0
-  	retValue = sendto(sockfd, ric, MAXLINE, 0, (struct sockaddr *) &servaddr, sizeof(servaddr));
+  	retValue = sendto(sockfd, pack, SHORT_PACK_LEN,  0, (struct sockaddr *) &servaddr, sizeof(servaddr));
   	if (retValue < 0) {		// controlli sulla send
   		perror("errore in sendto");
   		exit(1);
@@ -324,3 +322,50 @@ void * gestisciPacchetto(void * arg)
   					// l'unico modo di uscire � che il thread richiesta cancelli
   					// questo thread che gestisce il singolo pacchetto
 }
+
+/*
+void * gestoreConnessione(void * arg)
+{
+  printf("thread gestore connessione attivo \n");
+  pthread_t thread_id_GestPack;	// mantengo ID del gest. pacchetto per poterlo cancellare
+  struct arg_struct* args = (struct arg_struct*)arg;
+  struct sockaddr_in servaddr = args->addr;
+  int	sockfd = args->socketDescriptor;
+  char	ric[PACK_LEN];
+  char  recvlineShort[SHORT_PACK_LEN];
+  int	retValue;
+  strncpy(ric,args->buff, PACK_LEN);
+  
+  invio:
+  
+  if(pthread_create(&thread_id_GestPack, NULL, gestisciPacchetto, (void*)(args)) != 0) {
+	fprintf(stderr, "main: errore nella pthread_create\n");
+  	exit(1);
+  }
+  //attendi ack della richiesta
+  // Legge dal socket il pacchetto di risposta
+  int n = recvfrom(sockfd, recvlineShort, PACK_LEN, 0, NULL, NULL);
+  pthread_cancel(thread_id_GestPack); // chiudo il gestore del pacchetto
+  if (n < 0) {
+	perror("errore in recvfrom Gest Conn");
+	exit(1);
+  }
+  if (n > 0) {
+	recvlineShort[n] = 0;	// aggiunge carattere di terminazione
+	#ifdef PRINT
+	printf("PRINT: thread richiesta: \"%s\" risposta: \"%s\" \n", ric, recvline);
+	#endif
+	if(strncmp(recvlineShort, "ack", 3) == 0){
+		#ifdef PRINT
+		printf("PRINT: ack ricevuto \n");
+		#endif
+	}
+	else {
+		#ifdef PRINT
+		printf("PRINT: richiesta fallita \n");
+		#endif
+	}
+  }
+  pthread_exit(0);
+}
+*/

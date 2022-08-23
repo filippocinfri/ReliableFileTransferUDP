@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
-#define	probPerdita	0.4
+#define	probPerdita	0.05
 
 
 int scarta(void)

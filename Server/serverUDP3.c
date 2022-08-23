@@ -10,9 +10,16 @@
 #include <time.h>
 #include <string.h>
 #include <pthread.h>
+#include "libreria.h"
 
-#define SERV_PORT   5193
-#define MAXLINE     1024
+#define	SERV_PORT		5193
+#define SHORTPAY		128
+#define LONGPAY			1024
+#define HEADER_DIM		7
+#define	PACK_LEN		LONGPAY+HEADER_DIM
+#define SHORT_PACK_LEN	SHORTPAY+HEADER_DIM
+#define timeOutSec		12.2	// secondi per il timeout del timer
+#define windowSize		4		// dimensione della finestra del selective repeat
 
 struct thread_info {    /* Used as aragument to thread_start() */
   pthread_t thread_id;        /* ID returned by pthread_create() */
@@ -22,10 +29,10 @@ struct thread_info {    /* Used as aragument to thread_start() */
 
 struct arg_struct {
   struct sockaddr_in addr; //
-  char buff[MAXLINE]; //Buffer dove viene salvata la richiesta del client 
+  char *  buff; //Buffer dove viene salvato il packet
 };
 
-int create_thread(char buff[MAXLINE], struct sockaddr_in addr);
+int create_thread(char buff[SHORT_PACK_LEN], struct sockaddr_in addr);
 void clientRequestManager(struct arg_struct* arg);
 
 //IMPOSTARE SETUP INIZIALE
@@ -34,8 +41,7 @@ int main(int argc, char **argv) {
   int sockfd;
   socklen_t lenadd = sizeof(struct sockaddr_in);
   struct sockaddr_in addr;
-  char buff[MAXLINE];
-  int i = 0;
+  char buff[SHORT_PACK_LEN];
 
   if ((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { /* crea il socket */
     perror("errore in socket");
@@ -52,29 +58,32 @@ int main(int argc, char **argv) {
     exit(1);
   }
   
+
+  char * pack;
   while (1) { //RECVFROM
-    if ( (recvfrom(sockfd, buff, MAXLINE, 0, (struct sockaddr *)&addr, &lenadd)) < 0) {
+    pack = (char *)calloc(SHORT_PACK_LEN, 1);
+    if ( (recvfrom(sockfd, pack, SHORT_PACK_LEN, 0, (struct sockaddr *)&addr, &lenadd)) < 0) {
       perror("errore in recvfrom\n");
       exit(1);
     }
    
     printf("Ricevuto messaggio da IP: %s e porta: %i\n",inet_ntoa(addr.sin_addr),ntohs(addr.sin_port));
-    printf("Contenuto:%s\n", buff);
+    printf("Ricevuto %s \n", pack+HEADER_DIM);
 
     /* Creazione Thread per ogni richiesta, poich� abbiamo sicuramente ricevuto qualcosa */
-    printf("thread creato: %d \n",create_thread(buff,addr));
-    
+    printf("thread creato: %d \n",create_thread(pack,addr));
   }
   exit(0);
 }
 
-int create_thread(char buff[MAXLINE], struct sockaddr_in addr){
+int create_thread(char * pack, struct sockaddr_in addr){
   pthread_t tinfo = 0;
   
   /* Allocate memory for pthread_create() arguments */
   struct arg_struct* p_arg = malloc(sizeof(struct arg_struct));
   p_arg->addr = addr;
-  strncpy(p_arg->buff,buff,MAXLINE);
+  p_arg->buff = pack;
+  printf("Ricevuto %s \n", p_arg->buff+HEADER_DIM);
 
   /* The pthread_create() call, stores the thread ID into corresponding element of tinfo[] */
   if ( pthread_create(&tinfo, NULL, (void *)clientRequestManager, p_arg)) { 
@@ -86,18 +95,6 @@ int create_thread(char buff[MAXLINE], struct sockaddr_in addr){
 }
 
 void clientRequestManager(struct arg_struct* arg){ 
-  /* head: (lunghezza fissa)
-    tipo di messaggio (2bit)
-    lunghezza contenuto payload (2byte)
-    flag errore (1 bit)
-    request number (13 bit, per completare 2 byte)
-    ack number (1 bit) l'ack del msg num pacchetto tot relativo alla request number
-    num. offset (4byte)
-    last packet flag (1byte)
-    pacchetto: (lunghezza fissa)
-    payload nel pacchetto: (lunghezza var)
-  */
-
   //----------------- CREAZIONE SOCKET -----------------
   int sockReq;
   if (( sockReq = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { /* crea socket per nuovo thread */
@@ -108,12 +105,24 @@ void clientRequestManager(struct arg_struct* arg){
   struct sockaddr_in c_addr = arg->addr;
 
   //----------------- GESTIONE RICHIESTA -----------------
-  char* binary = (char*)malloc (sizeof (char) * 100);
-	binary = charToBinary(arg->buff,binary);
-  printf("\n%s\n\n",arg->buff);
-  readRequest(binary);
-  free(binary);
+  char * packet = arg->buff;
+  char firstByteHead = packet[0];
+  unsigned short lunghezzaPayload = packet[1];
+	printf("%hu %d \n", lunghezzaPayload, lunghezzaPayload);
+	if(readBit(firstByteHead, 7) == 0 & readBit(firstByteHead, 6) == 1){
+		#ifdef PRINT
+		printf("PRINT: letto: get \n");
+		#endif
+	}
+  else{
+    //ho ricevuto una risposta != ack, situazione inattesa
+    #ifdef PRINT
+    printf("PRINT: letto: NON get \n");
+    #endif
+  }
+  pthread_exit(NULL);
 
+  /*
   // creo il socket
   int sockfd;
   struct sockaddr_in clientaddr;
@@ -125,10 +134,10 @@ void clientRequestManager(struct arg_struct* arg){
 	memset((void *)&clientaddr, 0, sizeof(clientaddr));	// azzera servaddr
 	clientaddr.sin_family = AF_INET;			// assegna il tipo di indirizzo
 	clientaddr.sin_port = htons(SERV_PORT);		// assegna la porta del server
-	/* assegna l'indirizzo del server, preso dalla riga di comando.
-	L'indirizzo è una stringa da convertire in intero secondo network byte order. */
+	// assegna l'indirizzo del server, preso dalla riga di comando.
+	L'indirizzo è una stringa da convertire in intero secondo network byte order.
 	if (inet_pton(AF_INET, indirizzoServ, &servaddr.sin_addr) <= 0) {
-		/* inet_pton (p=presentation) vale anche per indirizzi IPv6 */
+		// inet_pton (p=presentation) vale anche per indirizzi IPv6
 		fprintf(stderr, "errore in inet_pton per %s", indirizzoServ);
 		exit(1);
 	}
@@ -150,4 +159,5 @@ void clientRequestManager(struct arg_struct* arg){
 
   free(arg);
   printf("Risposta inviata\n");
+  */
 }
