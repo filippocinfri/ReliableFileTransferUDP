@@ -223,7 +223,9 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		fprintf(stderr, "main: errore nella pthread_create\n");
   		exit(1);
   	}
-	sleep(10); //poi va modificato, 	attenderà messaggi successivi
+	sleep(timeOutSec-1); //poi va modificato, 	attenderà messaggi successivi
+	// libero lo spazio del messaggio precedente
+	free(ackPacket);
 	pthread_cancel(thread_id);
 
 	goto fine_richiesta;
