@@ -27,7 +27,7 @@
 
 /* global variables shared between threads */
 char *	indirizzoServ;				// indirizzo del server
-pthread_mutex_t mutexScarta, mutexControlla;	// mutex per consent. accesso unico a scarta e controlla
+pthread_mutex_t mutexScarta, mutexControlla, mutexHeaderPrint;	// mutex per consent. accesso unico a scarta e controlla
 struct arg_struct {				// struttura da passare come argomento tra i thread
   struct	sockaddr_in addr;
   char *	buff;				//pacchetto
@@ -53,6 +53,10 @@ int main(int argc, char *argv[ ])
   		exit(1);
   }
   if (pthread_mutex_init(&mutexControlla, NULL) != 0) {
+		fprintf(stderr, "main: errore nella mutex_init\n");
+  		exit(1);
+  }
+  if (pthread_mutex_init(&mutexHeaderPrint, NULL) != 0) {
 		fprintf(stderr, "main: errore nella mutex_init\n");
   		exit(1);
   }
@@ -123,7 +127,18 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	memset((void *)head, 0, SHORT_PACK_LEN);		// head
 	memset((void *)head, setBit(head[0], 6), 1);	// head
 	head[1] = lunghezzaPayload;
-	strcat(head+HEADER_DIM, ric);
+	//stampo l'header
+	if (pthread_mutex_lock(&mutexHeaderPrint)!=0) {	//per evitare accessi sovrapposti
+		fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
+  		exit(1);
+	}
+	headerPrint(head);
+	if (pthread_mutex_unlock(&mutexHeaderPrint)!=0) {
+		fprintf(stderr, "gestore richiesta: errore nella mutex_unlock\n");
+  		exit(1);
+	}
+	//appendo il nome del file
+	strcat(head+HEADER_DIM, ric+4);
 	
 	//#ifdef PRINT
 	//printf("PRINT: gestisci richiesta - payload packet: %s \n", head+HEADER_DIM);
@@ -182,7 +197,15 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	}
 	if (n > 0) {
 		char head = recvlineShort[0];
-		if(readBit(head, 7) == 0 & readBit(head, 6) == 1){
+		if (pthread_mutex_lock(&mutexControlla)!=0) {	//per evitare accessi sovrapposti
+		fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
+  		exit(1);
+	}
+	int risultatoRichiesta = controllaRichiesta(ric);
+	if (pthread_mutex_unlock(&mutexControlla)!=0) {
+		fprintf(stderr, "gestore richiesta: errore nella mutex_unlock\n");
+  		exit(1);
+	}if(readBit(head, 7) == 0 & readBit(head, 6) == 1){
 			#ifdef PRINT
 			printf("PRINT: thread richiesta: \"%s\" risposta: get \n", ric);
 			#endif
@@ -398,3 +421,4 @@ void * gestoreConnessione(void * arg)
   pthread_exit(0);
 }
 */
+
