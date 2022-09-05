@@ -1,0 +1,31 @@
+C allows you to "put"[1] an integer into any position of a c style string by casting the char array to an int*.
+
+// string: the array (char*)
+// pos: position in the array (size_t)
+// to_insert: the value to insert (int)
+(*(int*)(&string[pos])) = to_insert;
+
+But be warned: This is a sledgehammer approach. You have to be very careful when doing this or your code might show undefined behavior on different platforms. For example you have to manually check and answer:
+
+    Memory alignment: will I try to insert the integer at a position which is not addressable by the architecture?
+    Endianness: is the way that I write this integer to the array actually what I want?
+    sizeof(int): does the integer still fit into the array? Maybe consider using any fixed length integer types such as uint16_t, uint32_t, ...
+    and possibly a few more
+
+The following example shows the usage of the method discussed:
+
+#include <stdio.h>
+
+void insert_at_pos(char* arr, size_t pos, int to_insert){
+  (*(int*)(&arr[pos])) = to_insert;
+}
+
+int main(void) {
+  char string[200] = {0};
+  insert_at_pos(string, 3, 10);
+
+  //print char by char as hex
+  for (size_t i=0; i < sizeof(string)/sizeof(*string); ++i){
+    printf("%x ",(unsigned char)string[i]);
+  }
+}

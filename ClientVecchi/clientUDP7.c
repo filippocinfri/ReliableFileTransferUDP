@@ -16,22 +16,22 @@
 
 
 #define	SERV_PORT		5193
-#define SHORTPAY		128
-#define LONGPAY			1024
+#define SHORT_PAY		128
+#define LONG_PAY		1024
 #define HEADER_DIM		7
-#define	PACK_LEN		HEADER_DIM + LONGPAY
-#define SHORT_PACK_LEN	HEADER_DIM + SHORTPAY
+#define	PACK_LEN		HEADER_DIM + LONG_PAY
+#define SHORT_PACK_LEN	HEADER_DIM + SHORT_PAY
 #define MAX_SIZE_LEN_FIELD	4
 #define timeOutSec		9.2	// secondi per il timeout del timer
 #define windowSize		4		// dimensione della finestra del selective repeat
 
 
-/* global variables shared between threads */
-char *	indirizzoServ;				// indirizzo del server
+// global variables shared between threads
+char *	indirizzoServ;			// indirizzo del server
 pthread_mutex_t mutexScarta, mutexControlla, mutexHeaderPrint;	// mutex per consent. accesso unico a scarta e controlla
 struct arg_struct {				// struttura da passare come argomento tra i thread
   struct	sockaddr_in addr;
-  char *	buff;				//pacchetto
+  char *	buff;				//puntatore a pacchetto
   int		socketDescriptor;
 };
 
@@ -41,9 +41,9 @@ void * gestisciRichiesta(void* richiestaDaGestire);
 void * gestisciPacchetto(void* arg);
 
 
-int main(int argc, char *argv[ ])
-{
-  if(argc != 2){		// controlla numero degli argomenti
+int main(int argc, char *argv[ ]) {
+  // controlla numero degli argomenti
+  if(argc != 2){
   	fprintf(stderr, "utilizzo: daytime_clientUDP <indirizzo IP server>\n");
   	exit(1);
   }
@@ -62,34 +62,28 @@ int main(int argc, char *argv[ ])
   		exit(1);
   }
   
-  
   indirizzoServ = argv[1];	// var. globale, indirizzo del server accessibile a tutti i server
   pthread_t thread_id;		// ID del thread
-  char	richiesta[SHORTPAY]; //dichiaro buffer dove viene inserita la richiesta
   char*	puntatoreRichiesta;	// ......
-  int	retValue;		// dichiaro variabile che ospita il val di ritorno della pthread_create
-  						// per poi fare controlli
-  
+
   // attiva gestori per ogni richiesta in input
   while(1){
-	// inserire una richiesta
-  	scanf("%s", richiesta);
-
-
-	// salvo la richiesta
-  	puntatoreRichiesta = (char *)calloc(SHORTPAY, 1);
+	// salvo spazio per la richiesta
+  	puntatoreRichiesta = (char *)calloc(SHORT_PAY, 1);
 	if (puntatoreRichiesta == NULL) {	//errore nella calloc
   		fprintf(stderr, "main: errore nella malloc\n");
   		exit(1);
   	}
-  	memcpy(puntatoreRichiesta, richiesta, SHORTPAY);
-  	#ifdef PRINT
+
+	// attendi una richiesta
+  	scanf("%s", puntatoreRichiesta);
+	// stampa la richiesta
+	#ifdef PRINT
   	printf("PRINT: richiesta: \"%s\" inserita in:  %p \n", puntatoreRichiesta, puntatoreRichiesta);	//notifica l'utente della richiesta
   	#endif
-  	
-	// chiamo il gestore della richiesta
-  	retValue = pthread_create(&thread_id, NULL, gestisciRichiesta, (void*)puntatoreRichiesta);
-  	if(retValue != 0) {
+
+	// attivo il gestore della richiesta
+  	if(pthread_create(&thread_id, NULL, gestisciRichiesta, (void*)puntatoreRichiesta) != 0) {
 		fprintf(stderr, "main: errore nella pthread_create\n");
   		exit(1);
   	}
@@ -100,18 +94,18 @@ int main(int argc, char *argv[ ])
 
 void * gestisciRichiesta(void* richiestaDaGestire)
   {
-  	char * ric = (char *)richiestaDaGestire;
+	char * richiesta = (char *)richiestaDaGestire;
+	// stampa la richiesta
 	#ifdef PRINT
-	printf("PRINT: thread richiesta - gestisco la richiesta: \"%s\" \n", ric);		// stampa la richiesta
+	printf("PRINT: thread richiesta, gestisco: \"%s\" \n", richiesta);
 	#endif
-	
 	
 	// Controlla la correttezza della richiesta inserita
 	if (pthread_mutex_lock(&mutexControlla)!=0) {	//per evitare accessi sovrapposti
 		fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
   		exit(1);
 	}
-	int risultatoRichiesta = controllaRichiesta(ric);
+	int risultatoRichiesta = controllaRichiesta(richiesta);
 	if (pthread_mutex_unlock(&mutexControlla)!=0) {
 		fprintf(stderr, "gestore richiesta: errore nella mutex_unlock\n");
   		exit(1);
@@ -122,12 +116,20 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	}
 
 	// Creo il pacchetto
-	unsigned short lunghezzaPayload = strlen(ric)-4;
+	unsigned short lunghezzaPayload = strlen(richiesta)-4;
+	#ifdef PRINT
 	printf("%hu %d \n", lunghezzaPayload, lunghezzaPayload);
-	char * head = malloc(SHORT_PACK_LEN);
-	memset((void *)head, 0, SHORT_PACK_LEN);		// head
-	memset((void *)head, setBit(head[0], 6), 1);	// head
-	head[1] = lunghezzaPayload;
+	#endif
+	char * packet = malloc(SHORT_PACK_LEN);
+	memset((void *)packet, 0, SHORT_PACK_LEN);	// packet settato a 0
+												// list lascio header vuoto
+	if(risultatoRichiesta == 2){				// get
+		memset((void *)packet, setBit(packet[0], 6), 1);	// richiesta get 01
+	}
+	if(risultatoRichiesta == 3){				// put
+		memset((void *)packet, setBit(packet[0], 7), 1);	// richiesta put 10
+	}
+	packet[1] = lunghezzaPayload;
 	/*
 	//stampo l'header
 	if (pthread_mutex_lock(&mutexHeaderPrint)!=0) {	//per evitare accessi sovrapposti
@@ -140,32 +142,24 @@ void * gestisciRichiesta(void* richiestaDaGestire)
   		exit(1);
 	}
 	*/
-	//appendo il nome del file
-	strcat(head+HEADER_DIM, ric+4);
-	
-	//#ifdef PRINT
-	//printf("PRINT: gestisci richiesta - payload packet: %s \n", head+HEADER_DIM);
-	//printf("PRINT: gestisci richiesta - header: %c \n", head[0]);
-	//#endif
-
+	strcat(packet+HEADER_DIM, richiesta+4);		// appendo la richiesta dopo l'header
 
 	int   sockfd, n, retValue;
 	char  recvlineShort[SHORT_PACK_LEN];
 	char  recvlineLong[PACK_LEN];
 	struct sockaddr_in servaddr;
 
-
 	// creo il socket
   	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if ((sockfd) < 0) {			// controllo errori
+	if ((sockfd) < 0) {	// controllo eventuali errori
 		perror("errore in socket");
 		exit(1);
 	}
 	memset((void *)&servaddr, 0, sizeof(servaddr));	// azzera servaddr
-	servaddr.sin_family = AF_INET;			// assegna il tipo di indirizzo
-	servaddr.sin_port = htons(SERV_PORT);		// assegna la porta del server
-	/* assegna l'indirizzo del server, preso dalla riga di comando.
-	L'indirizzo è una stringa da convertire in intero secondo network byte order. */
+	servaddr.sin_family = AF_INET;					// assegna il tipo di indirizzo
+	servaddr.sin_port = htons(SERV_PORT);			// assegna la porta del server
+	// assegna l'indirizzo del server, preso dalla riga di comando.
+	// L'indirizzo è una stringa da convertire in intero secondo network byte order.
 	if (inet_pton(AF_INET, indirizzoServ, &servaddr.sin_addr) <= 0) {
 		/* inet_pton (p=presentation) vale anche per indirizzi IPv6 */
 		fprintf(stderr, "errore in inet_pton per %s", indirizzoServ);
@@ -173,45 +167,31 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	}
 	
 
-	//----------------GESTORE CONNESSIONE-----------------------//
-	pthread_t thread_id;	// mantengo ID del thread per poterlo cancellare
-	/*raccolgo le informazioni per la gestione del pacchetto in una struttura */
+	//---------------- GESTORE CONNESSIONE -----------------------
+	pthread_t thread_id;  // mantengo ID del thread creato per poterlo cancellare
+	//raccolgo le informazioni per la gestione del pacchetto in una struttura
 	struct arg_struct args;
+	socklen_t lenadd = sizeof(struct sockaddr_in);
 	args.addr = servaddr;
 	args.socketDescriptor = sockfd;
-	//strncpy(args.buff,head,SHORT_PACK_LEN); //¿serve la malloc??
-	args.buff = head;
-
-	//#ifdef PRINT
-	//printf("PRINT: gestisci richiesta - payload packet: %s \n", args.buff+HEADER_DIM);
-	//printf("PRINT: gestisci richiesta - header: %c \n", args.buff[0]);
-	//#endif
-
+	args.buff = packet;
+	
 	// invio richiesta
 	if(pthread_create(&thread_id, NULL, gestisciPacchetto, (void*)(&args)) != 0) {
 		fprintf(stderr, "main: errore nella pthread_create\n");
-  		exit(1);
-  	}
+		exit(1);
+    }
 	// attendi ack
-	n = recvfrom(sockfd, recvlineShort, SHORT_PACK_LEN, 0, NULL, NULL);
+	n = recvfrom(sockfd, recvlineShort, SHORT_PACK_LEN, 0,  (struct sockaddr*)&args.addr, &lenadd);
 	if (n < 0) {
 		perror("errore in recvfrom");
 		exit(1);
 	}
 	if (n > 0) {
-		char head = recvlineShort[0];
-		if (pthread_mutex_lock(&mutexControlla)!=0) {	//per evitare accessi sovrapposti
-			fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
-  			exit(1);
-		}
-		int risultatoRichiesta = controllaRichiesta(ric);
-		if (pthread_mutex_unlock(&mutexControlla)!=0) {
-			fprintf(stderr, "gestore richiesta: errore nella mutex_unlock\n");
-			exit(1);
-		}
-		if(readBit(head, 7) == 0 & readBit(head, 6) == 1){ //controlla se l'ack ha lo stesso req header
+		// controllo se ho ricevuto ack, ack => primo byte risposta == primo byte header
+		if(readBit(recvlineShort[0], 7) == readBit(packet[0], 7) & readBit(recvlineShort[0], 6) == readBit(packet[0], 6)){
 			#ifdef PRINT
-			printf("PRINT: thread richiesta: \"%s\" risposta: get \n", ric);
+			printf("PRINT: thread richiesta: \"%s\" risposta: ack \n", richiesta);
 			#endif
 			pthread_cancel(thread_id);
 			// *** ricordati controlli cancel***
@@ -222,26 +202,20 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 		else{
 			//ho ricevuto una risposta != ack, situazione inattesa
 			#ifdef PRINT
-			printf("PRINT: thread richiesta: \"%s\" risposta: NON ack \n", ric);
+			printf("PRINT: thread richiesta: \"%s\" risposta: NON ack \n", richiesta);
 			#endif
 		}
 	}
-	
+	printf("Ricevuto ack da IP: %s e porta: %i\n",inet_ntoa(args.addr.sin_addr),ntohs(args.addr.sin_port));
 	// libero lo spazio del messaggio precedente
-	free(head);
+	free(packet);
 
 	// Creo il pacchetto di ack
 	lunghezzaPayload = 0;
-	printf("%hu %d \n", lunghezzaPayload, lunghezzaPayload);
 	char * ackPacket = malloc(HEADER_DIM);
-	memset((void *)ackPacket, 0, HEADER_DIM);		// head
-	memset((void *)ackPacket, setBit(ackPacket[0], 6), 1);	// head
-	memset((void *)ackPacket, setBit(ackPacket[0], 7), 1);	// head
-	
-	//#ifdef PRINT
-	//printf("PRINT: gestisci richiesta - payload packet: %s \n", head+HEADER_DIM);
-	//printf("PRINT: gestisci richiesta - header: %c \n", head[0]);
-	//#endif
+	memset((void *)ackPacket, 0, HEADER_DIM);				// ack packet head
+	memset((void *)ackPacket, setBit(ackPacket[0], 6), 1);	// voglio scrivere 11000000
+	memset((void *)ackPacket, setBit(ackPacket[0], 7), 1);	// voglio scrivere 11000000
 
 	args.buff = ackPacket;
 	
@@ -256,9 +230,6 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	free(ackPacket);
 	goto fine_richiesta;
 
-
-    printf("Ricevuto ack da IP: %s e porta: %i\n",inet_ntoa(servaddr.sin_addr),ntohs(servaddr.sin_port));
-    
 
 	/*
 	// in base al comando
@@ -330,8 +301,8 @@ void * gestisciRichiesta(void* richiestaDaGestire)
 	*/
 	
 	fine_richiesta:
+	free(richiestaDaGestire);	// libero lo spazio allocato per la richiesta dal main
 	close(sockfd);				// chiudiamo il descrittore della socket
-	free(richiestaDaGestire);	// libero lo spazio che prima avevo allocato per la richiesta
 	pthread_exit(NULL);			// termina il thread
   }
   

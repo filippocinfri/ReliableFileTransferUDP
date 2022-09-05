@@ -21,7 +21,8 @@
 #define HEADER_DIM		7
 #define	PACK_LEN		HEADER_DIM + LONG_PAY
 #define SHORT_PACK_LEN	HEADER_DIM + SHORT_PAY
-#define timeOutSec		9.2	// secondi per il timeout del timer
+#define timeOutSec		9.2		// secondi per il timeout del timer
+#define WAIT_FACTOR		4		// massima attesa = WAIT_FACTOR * timeOutSec
 #define WINDOW_SIZE		5		// dimensione della finestra
 
 
@@ -43,7 +44,7 @@ struct arg_attesa {				// struttura da passare come argomento tra i thread
 // dichiarazioni dei gestori
 void * gestisciRichiesta(void* richiestaDaGestire);	
 void * gestisciPacchetto(void* arg);
-void * gestisciAttesa(void * arg); 
+void * gestisciAttesa(struct arg_attesa * arg); 
 void * listRequest(void * arg);
 void * getRequest(void * arg);
 void * putRequest(void * arg);  
@@ -194,9 +195,9 @@ void * gestisciRichiesta(void* richiestaDaGestire) {
 
 	// inizio attesa
 	struct arg_attesa argomenti;
-	args.richiesta = richiesta;
-	args.threadChiamante = pthread_self();
-	if(pthread_create(&thread_id_attesa, NULL, attesaMax, (void*)) != 0) {
+	argomenti.richiesta = richiesta;
+	argomenti.threadChiamante = pthread_self();
+	if(pthread_create(&thread_id_attesa, NULL, gestisciAttesa, &argomenti) != 0) {
 		fprintf(stderr, "main: errore nella pthread_create\n");
 		exit(1);
     }
@@ -282,9 +283,25 @@ void * gestisciRichiesta(void* richiestaDaGestire) {
   }
 
 
-void * gestisciAttesa(void* arg) {
-	char * richiesta = (char *)richiestaDaGestire;
-	pthread_cancel(pthread_t thread);
+void * gestisciAttesa(struct arg_attesa * arg) {
+	char * richiesta = (char *)malloc(SHORT_PACK_LEN);
+	richiesta = arg->richiesta;
+	pthread_t thread_id_chiamante = arg->threadChiamante;
+	pthread_t dummy;
+	
+	printf("thread gestisci attesa, dormo \n");
+	sleep(WAIT_FACTOR * timeOutSec);
+	printf("thread gestisci attesa, svegliato \n");
+
+	if(pthread_cancel(thread_id_chiamante) != 0) {
+		fprintf(stderr, "gestisciAttesa: errore nella pthread_cancel\n");
+		exit(1);
+	}
+	if(pthread_create(dummy, NULL, listRequest, (void*)richiesta) != 0) {
+		fprintf(stderr, "gestisciAttesa: errore nella pthread_create\n");
+		exit(1);
+	}
+	pthread_exit(NULL);
 }
 
 
@@ -296,14 +313,24 @@ void * getRequest(void * arg) {
 	unsigned long sequenceNumber, indice;
 	char * recvdPack = calloc(PACK_LEN, 1);
 
+	
 	// SELECTIVE REPEAT RECV
 	// creo il buffer in cui metto i pacchetti, e quello in cui scrivo quali spazi sono liberi
 	char * buffer = calloc(WINDOW_SIZE, PACK_LEN);
 	char * bufferFill = calloc(WINDOW_SIZE, 1);
+	// creo il pacchetto con cui ackare
 	char * ackPacket = calloc(HEADER_DIM, 1);
-	memset((void *)ackPacket, setBit(ackPacket[0], 6), 1);
-	memset((void *)ackPacket, setBit(ackPacket[0], 7), 1);	// 11
-	
+	if (pthread_mutex_lock(&mutexBitManipulation)!=0) {	//per evitare accessi sovrapposti
+		fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
+  		exit(1);
+	}
+	setBit(ackPacket[0], 6);
+	setBit(ackPacket[0], 7);	// 11
+	if (pthread_mutex_unlock(&mutexBitManipulation)!=0) {	//per evitare accessi sovrapposti
+		fprintf(stderr, "gestore richiesta: errore nella mutex_lock\n");
+  		exit(1);
+	}
+
 	while(1){
 		#ifdef PRINT
 		printf("PRINT: gest. rich. inizio: %d \n", inizio);
@@ -351,6 +378,8 @@ void * getRequest(void * arg) {
 	free(ackPacket); // libero le aree di memoria occupate
 	free(buffer);
 	free(bufferFill);
+	*/
+	printf("fine get \n");
 }
 
 
