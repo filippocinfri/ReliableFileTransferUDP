@@ -5,7 +5,6 @@
 
 void charToBinary(char c[], char* binary, int numOfChar);
 void binaryToChar(char* binary, char* text);
-void readRequest(char* binary);
 void list(char* binary);
 
 //Converte una stringa in un ulteriore stringa, rappresentativa della stessa in binario. Potendo specificare il numero di char da convertire.
@@ -42,13 +41,6 @@ void binaryToChar(char *binary, char *text) {
     printf("Result = %s\n", text);
 }
 
-//Legge il comando scritto da tastiera dal client e lo elabora chiamando la relativa funzione
-void readRequest(char* binary){
-    if (strncmp(binary,"00",2) == 0);
-    //else if (strncmp(binary,"01",2) == 0) get();
-    //else if (strncmp(binary,"10",2) == 0) put();
-}
-
 //Svolge il lavoro del comado list, legge tutti i file in una cartella e per ora li stampa a schermo
 void list(char* buff){
     DIR *folder;
@@ -68,11 +60,14 @@ void list(char* buff){
 
 
 /* COSE CHE NON SERVONO MA POTREBBERO TORNARE UTILI IN CASO DI PIU CONTROLLI 
+
 void binaryToText(char *binary, int binaryLength, char *text, int symbolCount);
 void formatBinary(char *input, int length, char *output);
 unsigned long binaryToDecimal(char *binary, int length);
 int validate(char *binary); 
+
 int main(){
+
 	char* buff = "a";
     char* binary = (char*)malloc (sizeof (char) * 100);
 	binary = charToBinary(buff,binary);
@@ -83,6 +78,7 @@ int main(){
     int symbolCount = binaryLength / 8 + 1;
     char *text = malloc(symbolCount + 1);
     char *formattedBinary = malloc(binaryLength + 1);
+
     if(text == NULL || formattedBinary == NULL)
         exit(1);
     if(binaryLength % 8 == 0)
@@ -98,6 +94,7 @@ int main(){
     
 	return 0;
 } 
+
 void binaryToText(char *binary, int binaryLength, char *text, int symbolCount){
     int i;
     for(i = 0; i < binaryLength; i+=8, binary += 8){
@@ -107,6 +104,7 @@ void binaryToText(char *binary, int binaryLength, char *text, int symbolCount){
     }
     text -= symbolCount;
 }
+
 void formatBinary(char *input, int length, char *output){
     while(*input){
         if(*input == '0' || *input == '1'){
@@ -119,6 +117,7 @@ void formatBinary(char *input, int length, char *output){
     }
     output -= length;
 }
+
 int validate(char *binary){ 
 	while(*binary){
 		if((*binary != '0') && (*binary != '1') && (*binary != ' '))
@@ -127,6 +126,7 @@ int validate(char *binary){
 	}
 	return 1;
 }
+
 unsigned long binaryToDecimal(char *binary, int length){
 	int i;
 	unsigned long decimal = 0;

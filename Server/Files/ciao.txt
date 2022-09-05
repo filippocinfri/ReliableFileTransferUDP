@@ -1,0 +1,52 @@
+cccccccbbbbbbbbb
+//----------------- CREAZIONE NUOVA SOCKET PER NUOVO THREAD -----------------
+  int sockReq, n;
+  if (( sockReq = socket(AF_INET, SOCK_DGRAM, 0)) < 0) { /* crea socket per nuovo thread */
+    perror("errore in socket");
+    exit(1);
+  }
+
+  arg->socketDescriptor = sockReq;
+  
+  //----------------- GESTIONE RICHIESTA -----------------
+
+
+
+  // ------------- INVIO ACK -------------- creo il pacchetto, header + dim lunghezza file da inviare (size)
+  
+  char* packet = (char*) calloc(SHORT_PACK_LEN,1);
+  memset((void*)packet, setBit(packet[0], 7), 1);	// Imposto [10 ... ] primo bit per la put
+
+  pthread_t thread_id;	// mantengo ID del thread per poterlo cancellare
+  if(pthread_create(&thread_id, NULL, gestisciPacchetto, arg) != 0) {
+    fprintf(stderr, "main: errore nella pthread_create\n");
+    exit(1);
+  }
+
+  // -------------- ATTESA ACK DEL CLIENT ------------  solo header 
+
+  //char recvlineShort[SHORT_PACK_LEN];                 // Creo buffer che contiene l'header dell'ack del client 
+  n = recvfrom(sockReq, packet, SHORT_PACK_LEN, 0, NULL, NULL);
+  if (n < 0) {
+    perror("Errore in recvfrom\n");
+    exit(1);
+  } 
+  if (n > 0) {
+    char head = recvlineShort[0];
+    if(readBit(head, 7) == 1 & readBit(head, 6) == 1){
+      pthread_cancel(thread_id);              // In gestisci pacchetto
+      // *** ricordati controlli cancel***
+      #ifdef PRINT
+      printf("PRINT: thread cancellato \n");
+      #endif
+    }
+    else{
+      //ho ricevuto una risposta != ack, situazione inattesa
+    }
+  }
+
+  int size = (int)packet[HEADER_DIM]; //Funziona?   // Size del file che devo creare
+  
+  printf("Ack ricevuto\n");
+  free(packet);                           // Non devo più inviare ack vero(?)
+
